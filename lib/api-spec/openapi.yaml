@@ -1,0 +1,294 @@
+openapi: 3.1.0
+info:
+  # Do not change the title, if the title changes, the import paths will be broken
+  title: Api
+  version: 0.1.0
+  description: Bankruptcy-risk prediction API backed by the supplied LightGBM model.
+servers:
+  - url: /api
+    description: Base API path
+tags:
+  - name: health
+    description: Health operations
+  - name: predictions
+    description: Bankruptcy-risk predictions
+  - name: model
+    description: Model readiness and metadata
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      tags: [health]
+      summary: Health check
+      description: Returns server health status
+      responses:
+        "200":
+          description: Healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthStatus"
+  /model-info:
+    get:
+      operationId: getModelInfo
+      tags: [model]
+      summary: Get model and dataset readiness
+      responses:
+        "200":
+          description: Model metadata and available prediction paths
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ModelInfo"
+  /predictions/by-index:
+    post:
+      operationId: predictByIndex
+      tags: [predictions]
+      summary: Predict for a record in the train or test dataset
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/IndexPredictionInput"
+      responses:
+        "200":
+          description: Model prediction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PredictionResult"
+        "400":
+          description: Invalid dataset or index
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "404":
+          description: Index not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: Dataset or model unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /predictions:
+    post:
+      operationId: predictFromFeatures
+      tags: [predictions]
+      summary: Predict for a new object from its feature map
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FeaturePredictionInput"
+      responses:
+        "200":
+          description: Model prediction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PredictionResult"
+        "400":
+          description: Invalid feature input
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: Model unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+  /predictions/from-csv:
+    post:
+      operationId: predictFromCsv
+      tags: [predictions]
+      summary: Predict from a single headerless CSV row
+      description: Accepts exactly 1367 comma-separated values ordered from feature_0 to feature_1366.
+      requestBody:
+        required: true
+        content:
+          text/csv:
+            schema:
+              type: string
+      responses:
+        "200":
+          description: Model prediction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PredictionResult"
+        "400":
+          description: Invalid CSV row
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+        "503":
+          description: Model unavailable
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiError"
+components:
+  schemas:
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+      required:
+        - status
+    ApiError:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+    ModelInfo:
+      type: object
+      properties:
+        ready:
+          type: boolean
+        model:
+          type: string
+        model_version:
+          type: string
+        oof_auc:
+          type: number
+          nullable: true
+        feature_count:
+          type: integer
+        index_lookup_ready:
+          type: boolean
+        dataset_ready:
+          type: boolean
+        message:
+          type: string
+      required:
+        - ready
+        - model
+        - model_version
+        - feature_count
+        - index_lookup_ready
+        - dataset_ready
+        - message
+    IndexPredictionInput:
+      type: object
+      properties:
+        dataset:
+          type: string
+          enum: [train, test]
+        index:
+          type: integer
+          minimum: 0
+      required: [dataset, index]
+    FeaturePredictionInput:
+      type: object
+      properties:
+        id:
+          type: integer
+          nullable: true
+        features:
+          type: object
+          minProperties: 1
+          maxProperties: 1367
+          additionalProperties:
+            type: [number, "null"]
+          description: Numeric values named feature_0 through feature_1366.
+        text_features:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 1
+          description: Optional word-to-count map from the text features.
+      required: [features]
+    TopFeature:
+      type: object
+      properties:
+        name:
+          type: string
+        label:
+          type: string
+        raw_value:
+          type: [number, "null"]
+        baseline_value:
+          type: [number, "null"]
+        baseline_median:
+          type: [number, "null"]
+        bankrupt_value:
+          type: [number, "null"]
+        bankrupt_median:
+          type: [number, "null"]
+        shap_value:
+          type: number
+      required:
+        - name
+        - label
+        - raw_value
+        - baseline_value
+        - baseline_median
+        - bankrupt_value
+        - bankrupt_median
+        - shap_value
+    TopWord:
+      type: object
+      properties:
+        word:
+          type: string
+        count:
+          type: integer
+        impact:
+          type: number
+        share_bankrupt:
+          type: [number, "null"]
+        share_nonbankrupt:
+          type: [number, "null"]
+      required:
+        - word
+        - count
+        - impact
+        - share_bankrupt
+        - share_nonbankrupt
+    PredictionResult:
+      type: object
+      properties:
+        id:
+          type: [integer, "null"]
+        probability:
+          type: number
+          minimum: 0
+          maximum: 1
+        percentile:
+          type: number
+        shap_base:
+          type: number
+        top_features:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/TopFeature"
+        top_words:
+          type: array
+          maxItems: 50
+          items:
+            $ref: "#/components/schemas/TopWord"
+        source:
+          type: string
+          enum: [train, test, new]
+        true_target:
+          type: integer
+          enum: [0, 1]
+        warnings:
+          type: array
+          items:
+            type: string
+      required: [id, probability, top_features, top_words, source]
+

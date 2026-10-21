@@ -1,0 +1,9 @@
+lightgbm==4.7.0
+numpy==2.5.4
+pandas==3.0.6
+pyarrow==26.0.0
+scipy==1.18.1
+fastapi==0.156.2
+uvicorn==0.54.0
+python-multipart==0.0.32
+pydantic==2.14.1
